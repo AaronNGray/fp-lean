@@ -4,6 +4,7 @@ import SubVerso.Examples
 import Lean.Data.NameMap
 import Lean.DocString.View
 public import VersoManual
+public import FPLean.TeX
 public meta import FPLean.Examples.Commands
 public import FPLean.Examples.Interaction
 public import FPLean.Examples.OtherLanguages
@@ -117,7 +118,10 @@ end
 
 block_extension Block.creativeCommons where
   traverse _ _ _ := pure none
-  toTeX := none
+  toTeX :=
+    open Verso.Output.TeX in
+    some <| fun _ _ _ _ _ =>
+      pure <| .raw "\\par\\noindent This work is licensed under a \\href{https://creativecommons.org/licenses/by/4.0/}{Creative Commons Attribution 4.0 International License}.\\par"
   toHtml :=
     some <| fun _ _ _ _ _ =>
       pure html%{
@@ -161,7 +165,23 @@ div.paragraph > .eval-steps:not(:last-child), div.paragraph > .eval-steps:not(:l
 block_extension Block.leanEvalSteps (steps : Array Highlighted) via withHighlighting where
   data := ToJson.toJson steps
   traverse _ _ _ := pure none
-  toTeX := none
+  toTeX :=
+    open Verso.Output.TeX in
+    some <| fun _ _ _ data _ => do
+      match FromJson.fromJson? data with
+      | .error err =>
+        reportError <| "Couldn't deserialize Lean code block while rendering TeX: " ++ err
+        pure .empty
+      | .ok (steps : Array Highlighted) =>
+        let listings := steps.map fun step =>
+          FPLean.TeX.mintedListing "lean4" (FPLean.TeX.highlightedSource step)
+        let mut output := #[]
+        for i in [:listings.size] do
+          if i > 0 then
+            output := output.push (.raw "\n\\begin{center}\\(\\Longrightarrow\\)\\end{center}\n")
+          output := output.push listings[i]!
+        pure <| .seq output
+  usePackages := FPLean.TeX.mintedPackages
   extraCss := [evalStepsStyle]
   toHtml :=
     some <| fun _ _ _ data _ => do
@@ -179,7 +199,11 @@ block_extension Block.leanEvalSteps (steps : Array Highlighted) via withHighligh
 
 block_extension Block.leanEqReason where
   traverse _ _ _ := pure none
-  toTeX := none
+  toTeX :=
+    open Verso.Output.TeX in
+    some <| fun _ goB _ _ contents => do
+      let contents ← contents.mapM goB
+      pure <| .seq #[.raw "\\begin{quote}\\itshape\\texttt{=\\{} ", .seq contents, .raw " \\texttt{\\}=}\\end{quote}"]
   toHtml :=
     some <| fun _ goB _ _ contents => do
       return html%{
@@ -236,7 +260,16 @@ div.paragraph > .eq-steps:not(:last-child) {
 
 block_extension Block.leanEqSteps where
   traverse _ _ _ := pure none
-  toTeX := none
+  toTeX :=
+    open Verso.Output.TeX in
+    some <| fun _ goB _ _ contents => do
+      let contents ← contents.mapM goB
+      let mut output := #[]
+      for i in [:contents.size] do
+        if i > 0 then
+          output := output.push (.raw "\n\\medskip\n")
+        output := output.push contents[i]!
+      pure <| .seq output
   extraCss := [eqStepsStyle]
   toHtml :=
     some <| fun _ goB _ _ contents => do
@@ -576,7 +609,11 @@ end
 inline_extension Inline.shellCommand (command : String) where
   traverse _ _ _ := pure none
   data := .str command
-  toTeX := none
+  toTeX :=
+    open Verso.Output.TeX in
+    some <| fun go _ _ content => do
+      let content ← content.mapM go
+      pure <| .seq #[.raw "\\texttt{\\$ ", .seq content, .raw "}"]
   toHtml := some fun _ _ data _ => do
     let .str command := data
       | reportError s!"Failed to deserialize commands:\n{data}"
@@ -604,7 +641,19 @@ inline_extension Inline.shellCommand (command : String) where
 block_extension Block.shellCommand (command : String) (prompt : Option String) where
   traverse _ _ _ := pure none
   data := .arr #[.str command, prompt.map .str |>.getD .null]
-  toTeX := none
+  toTeX :=
+    open Verso.Output.TeX in
+    some <| fun _ _ _ data _ => do
+      match data with
+      | .arr #[.str cmd, prompt] =>
+        let prompt := match prompt with
+          | .str promptText => promptText
+          | _ => "$ "
+        pure <| FPLean.TeX.mintedListing "bash" (prompt ++ cmd)
+      | _ =>
+        reportError s!"Failed to deserialize commands while rendering TeX:\n{data}"
+        pure .empty
+  usePackages := FPLean.TeX.mintedPackages
   toHtml := some fun _ _ _ data _ => do
     let .arr #[.str command, prompt?] := data
       | reportError s!"Failed to deserialize commands:\n{data}"
@@ -728,7 +777,19 @@ meta def commandOutCodeBlock : CodeBlockExpander
 block_extension Block.shellCommands (segments : Array (String × Bool)) where
   traverse _ _ _ := pure none
   data := toJson segments
-  toTeX := none
+  toTeX :=
+    open Verso.Output.TeX in
+    some <| fun _ _ _ data _ => do
+      match FromJson.fromJson? data with
+      | .error err =>
+        reportError <| "Failed to deserialize commands while rendering TeX: " ++ err
+        pure .empty
+      | .ok (segments : Array (String × Bool)) =>
+        let transcript := segments.foldl (init := "") fun out (segmentText, isCommand) =>
+          out ++ (if isCommand then "$ " else "") ++ segmentText ++
+            (if segmentText.endsWith "\n" then "" else "\n")
+        pure <| FPLean.TeX.mintedListing "console" transcript
+  usePackages := FPLean.TeX.mintedPackages
   toHtml := some fun _ _ _ data _ => do
     let .ok (segments : Array (String × Bool)) := fromJson? data
       | reportError s!"Failed to deserialize commands:\n{data}"

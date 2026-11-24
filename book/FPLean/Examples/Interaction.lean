@@ -10,6 +10,7 @@ public import Lean.Exception
 public import Lean.CoreM
 public import Verso.Doc.ArgParse
 public import VersoManual
+public import FPLean.TeX
 
 public section
 
@@ -64,7 +65,19 @@ private meta opaque evalSession (stx : Syntax) : TermElabM (Option Expect.Sessio
 block_extension Block.interaction (segments : Array (String × String)) where
   traverse _ _ _ := pure none
   data := toJson segments
-  toTeX := none
+  toTeX :=
+    open Verso.Output.TeX in
+    some <| fun _ _ _ data _ => do
+      match FromJson.fromJson? data with
+      | .error err =>
+        reportError s!"Failed to deserialize interaction while rendering TeX:\n{err}"
+        pure .empty
+      | .ok (segments : Array (String × String)) =>
+        let transcript := segments.foldl (init := "") fun out (segmentText, role) =>
+          out ++ (if role == "command" then "$ " else "") ++ segmentText ++
+            (if segmentText.endsWith "\n" then "" else "\n")
+        pure <| FPLean.TeX.mintedListing "console" transcript
+  usePackages := FPLean.TeX.mintedPackages
   toHtml := some fun _ _ _ data _ => do
     let .ok (segments : Array (String × String)) := fromJson? data
       | reportError s!"Failed to deserialize interaction:\n{data}"
