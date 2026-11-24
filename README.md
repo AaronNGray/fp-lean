@@ -8,6 +8,17 @@ Generally speaking, the code in this repository is not intended to work on all c
 
 To build the book, change to the [`book`](book/) directory and run `lake exe fp-lean`. After this, `book/_out/html-multi` contains a multi-page Web version of the book.
 
+To render a PDF, install LuaLaTeX, the `minted` LaTeX package, and Pygments for Python 3.13. The `python3` on `PATH` must resolve to an interpreter with Pygments installed. From the `book/` directory, run:
+
+```
+lake exe fp-lean --with-tex --without-html-single --without-html-multi
+cd _out/tex
+lualatex -shell-escape -halt-on-error -interaction=nonstopmode main.tex
+lualatex -shell-escape -halt-on-error -interaction=nonstopmode main.tex
+```
+
+The PDF is written to `book/_out/tex/main.pdf`.
+
 To read the book locally, serve that directory over HTTP and open the address that the server prints:
 
 ```
