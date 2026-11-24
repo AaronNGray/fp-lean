@@ -98,4 +98,11 @@ private def canonicalRedirects : ExtraStep := fun mode config _ _ =>
   | .multi => addCanonicalRedirects (config.destination / "html-multi") ""
   | .single => pure ()
 
-def main := manualMain (%doc FPLean) (config := config) (extraSteps := [canonicalRedirects])
+def main (args : List String) : IO UInt32 := do
+  let options :=
+    if args.contains "--with-tex" then
+      ["--without-html-single", "--without-html-multi"] ++ args
+    else
+      args
+  manualMain (%doc FPLean) (options := options) (config := config)
+    (extraSteps := [canonicalRedirects])
