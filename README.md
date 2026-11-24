@@ -8,14 +8,52 @@ Generally speaking, the code in this repository is not intended to work on all c
 
 To build the book, change to the [`book`](book/) directory and run `lake exe fp-lean`. After this, `book/_out/html-multi` contains a multi-page Web version of the book.
 
-To render a PDF, install LuaLaTeX, the `minted` LaTeX package, and Pygments for Python 3.13. The `python3` on `PATH` must resolve to an interpreter with Pygments installed. From the `book/` directory, run:
+## Rendering a PDF on macOS
 
-```
-lake exe fp-lean --with-tex --without-html-single --without-html-multi
-cd _out/tex
-lualatex -shell-escape -halt-on-error -interaction=nonstopmode main.tex
-lualatex -shell-escape -halt-on-error -interaction=nonstopmode main.tex
-```
+These instructions use MacPorts to install LuaLaTeX, the LaTeX packages and fonts used by the
+book, and Pygments for Python 3.13.
+
+1. Install the dependencies:
+
+   ```
+   sudo port install texlive-luatex texlive-latex-extra texlive-latex-recommended texlive-pictures texlive-fonts-recommended texlive-fonts-extra py313-pygments
+   ```
+
+2. Put Python 3.13 first on `PATH`. `latexminted` uses the `python3` found there; the 0.6.0
+   version used for this build is not compatible with Python 3.14. Confirm Python and Pygments:
+
+   ```
+   export PATH="/opt/local/Library/Frameworks/Python.framework/Versions/3.13/bin:$PATH"
+   python3 --version
+   python3 -m pygments -V
+   ```
+
+3. Check that TeX can find `minted` and `ulem`:
+
+   ```
+   kpsewhich minted.sty
+   kpsewhich ulem.sty
+   ```
+
+   If `kpsewhich ulem.sty` returns no path, install `ulem` from CTAN into the user TeX tree:
+
+   ```
+   mkdir -p "$HOME/Library/texmf/tex/latex/ulem"
+   curl -fL https://mirrors.ctan.org/macros/latex/contrib/ulem.zip -o /tmp/ulem.zip
+   unzip -p /tmp/ulem.zip ulem/ulem.sty > "$HOME/Library/texmf/tex/latex/ulem/ulem.sty"
+   mktexlsr "$HOME/Library/texmf"
+   ```
+
+4. From the repository root, generate the TeX and compile it twice. The second LuaLaTeX run
+   resolves cross-references; `-shell-escape` lets `minted` invoke Pygments.
+
+   ```
+   cd book
+   lake exe fp-lean --with-tex
+   cd _out/tex
+   lualatex -shell-escape -halt-on-error -interaction=nonstopmode main.tex
+   lualatex -shell-escape -halt-on-error -interaction=nonstopmode main.tex
+   ```
 
 The PDF is written to `book/_out/tex/main.pdf`.
 
